@@ -4,10 +4,12 @@ import numpy as np
 import rospy
 from visualization_msgs.msg import Marker
 from scipy.spatial.transform import Rotation as R
+from tf2_ros import TransformBroadcaster
+from geometry_msgs.msg import TransformStamped
 
 g = 9.8 # Gravity
 mb = 1 # Body mass
-ml = 1 # Leg mass
+ml = 5 # Leg mass
 l0 = 0 # Initial leg extension (0 extension corresponds to leg length 1)
 phi0 = 0 # Initial leg angle, radians
 theta0 = 0 # Initial body angle, radians
@@ -33,9 +35,9 @@ body_marker.pose.orientation.w = 1
 body_marker.scale.x = 0.5
 body_marker.scale.y = 0.25
 body_marker.scale.z = 0.25
-body_marker.color.r = 0
-body_marker.color.g = 1
-body_marker.color.b = 0
+body_marker.color.r = 0.5
+body_marker.color.g = 0.5
+body_marker.color.b = 0.5
 body_marker.color.a = 1
 body_marker.header.frame_id = "world"
 body_marker.ns = "hopper_node"
@@ -54,16 +56,23 @@ leg_marker.pose.orientation.w = 1
 leg_marker.scale.x = 0.2
 leg_marker.scale.y = 0.2
 leg_marker.scale.z = 1.0
-leg_marker.color.r = 0
-leg_marker.color.g = 0
-leg_marker.color.b = 1
+leg_marker.color.r = 0.5
+leg_marker.color.g = 0.5
+leg_marker.color.b = 0.5
 leg_marker.color.a = 1
 leg_marker.header.frame_id = "world"
 leg_marker.ns = "hopper_node"
 
-dt = 0.02
+br = TransformBroadcaster()
+body_pose_msg = TransformStamped()
+body_pose_msg.header.frame_id = 'world'
+body_pose_msg.child_frame_id = 'body'
+body_pose_msg.transform.rotation.w = 1
+
+dt = 0.01
 rate = rospy.Rate(1/dt)
 
+# Initialize robot state
 phi = phi0
 l = l0
 theta = theta0
@@ -72,18 +81,23 @@ z = z0
 xdot = xdot0
 zdot = zdot0
 
+# Sinusoid parameters for u1 and u2
+a1 = 5
+a2 = 5
+w = 2*np.pi/T
+
 t = 0
 
 start_time = rospy.Time.now()
 while not rospy.is_shutdown():
-  u1 = 0
-  u2 = 0
-
   if (rospy.Time.now() - start_time).to_sec() > 2 and t < T:
     # Integrate dynamics
+    u1 = a1*np.sin(w*t)
+    u2 = a2*np.cos(w*t)
+
     phi += u1*dt
     l += u2*dt
-    theta += ml*(l + 1)**2/(1 + ml*(l + 1)**2)*u1*dt
+    theta += -ml*(l + 1)**2/(1 + ml*(l + 1)**2)*u1*dt
 
     x += xdot*dt
     z += (zdot - 0.5*g*dt)*dt
@@ -91,6 +105,9 @@ while not rospy.is_shutdown():
 
     t += dt
 
+    alpha = theta + ml/(1 + ml)*phi
+
+  # Publish visualization
   body_pos = np.array([x, 0., z])
   body_marker.pose.position.x = body_pos[0]
   body_marker.pose.position.z = body_pos[2]
@@ -117,5 +134,15 @@ while not rospy.is_shutdown():
   leg_marker.header.stamp = rospy.Time.now()
   body_pub.publish(body_marker)
   leg_pub.publish(leg_marker)
+
+  body_pose_msg.transform.translation.x = body_pos[0]
+  body_pose_msg.transform.translation.y = body_pos[1]
+  body_pose_msg.transform.translation.z = body_pos[2]
+  body_pose_msg.transform.rotation.x = body_quat[0]
+  body_pose_msg.transform.rotation.y = body_quat[1]
+  body_pose_msg.transform.rotation.z = body_quat[2]
+  body_pose_msg.transform.rotation.w = body_quat[3]
+  body_pose_msg.header.stamp = rospy.Time.now()
+  br.sendTransform(body_pose_msg)
   
   rate.sleep()
