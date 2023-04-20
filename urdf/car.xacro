@@ -1,0 +1,149 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://wiki.ros.org/xacro" name="satellite">
+  <xacro:property name="car_mass" value="100" />
+  <xacro:property name="car_width" value="0.5" />
+  <xacro:property name="car_height" value="0.25" />
+  <xacro:property name="car_length" value="1" />
+  <xacro:property name="wheel_width" value="0.2" />
+  <xacro:property name="wheel_rad" value="0.25" />
+  <xacro:property name="PI" value="3.1415926535897931" />
+
+  <link name="car">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <box size="${car_length} ${car_width} ${car_height}"/>
+      </geometry>
+      <material name="gray">
+        <color rgba="0.7 0.7 0.7 1"/>
+      </material>
+    </visual>
+    <inertial>
+      <mass value="${car_mass}"/>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <inertia ixx="${car_mass*car_width*car_height/6}" ixy="0" ixz="0"
+               iyy="${car_mass*car_length*car_height/6}" iyz="0" izz="${car_mass*car_width*car_height/6}"/>
+    </inertial>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <box size="${car_length} ${car_width} ${car_height}"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="front_wheelbase"/>
+
+  <link name="front_wheel_left">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <cylinder radius="${wheel_rad}" length="${wheel_width}"/>
+      </geometry>
+      <material name="dark_gray">
+        <color rgba="0.6 0.6 0.6 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <cylinder radius="${wheel_rad}" length="${wheel_width}"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="front_wheel_right">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <cylinder radius="${wheel_rad}" length="${wheel_width}"/>
+      </geometry>
+      <material name="dark_gray">
+        <color rgba="0.6 0.6 0.6 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <cylinder radius="${wheel_rad}" length="${wheel_width}"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="rear_wheelbase"/>
+
+  <link name="rear_wheel_left">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <cylinder radius="${wheel_rad}" length="${wheel_width}"/>
+      </geometry>
+      <material name="dark_gray">
+        <color rgba="0.6 0.6 0.6 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <cylinder radius="${wheel_rad}" length="${wheel_width}"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <link name="rear_wheel_right">
+    <visual>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <cylinder radius="${wheel_rad}" length="${wheel_width}"/>
+      </geometry>
+      <material name="dark_gray">
+        <color rgba="0.6 0.6 0.6 1"/>
+      </material>
+    </visual>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <geometry>
+        <cylinder radius="${wheel_rad}" length="${wheel_width}"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <joint name="car_to_front_wheelbase" type="revolute">
+    <parent link="car"/>
+    <child link="front_wheelbase"/>
+    <origin xyz="${car_length/2} 0 ${-car_height/2 - wheel_rad}" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <dynamics damping="0" friction="0"/>
+    <limit effort="7.0" lower="-3.14" upper="3.14" velocity="2.208932"/>
+  </joint>
+
+  <joint name="front_wheelbase_to_left" type="fixed">
+    <parent link="front_wheelbase"/>
+    <child link="front_wheel_left"/>
+    <origin xyz="0 ${car_width/2 + wheel_width/2} 0" rpy="${-PI/2} 0 0"/>
+  </joint>
+
+  <joint name="front_wheelbase_to_right" type="fixed">
+    <parent link="front_wheelbase"/>
+    <child link="front_wheel_right"/>
+    <origin xyz="0 ${-car_width/2 - wheel_width/2} 0" rpy="${PI/2} 0 0"/>
+  </joint>
+
+  <joint name="car_to_rear_wheelbase" type="fixed">
+    <parent link="car"/>
+    <child link="rear_wheelbase"/>
+    <origin xyz="${-car_length/2} 0 ${-car_height/2 - wheel_rad}" rpy="0 0 0"/>
+  </joint>
+
+  <joint name="rear_wheelbase_to_left" type="fixed">
+    <parent link="rear_wheelbase"/>
+    <child link="rear_wheel_left"/>
+    <origin xyz="0 ${car_width/2 + wheel_width/2} 0" rpy="${-PI/2} 0 0"/>
+  </joint>
+
+  <joint name="rear_wheelbase_to_right" type="fixed">
+    <parent link="rear_wheelbase"/>
+    <child link="rear_wheel_right"/>
+    <origin xyz="0 ${-car_width/2 - wheel_width/2} 0" rpy="${PI/2} 0 0"/>
+  </joint>
+</robot>
