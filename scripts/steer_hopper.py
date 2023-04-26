@@ -6,6 +6,7 @@ from visualization_msgs.msg import Marker
 from scipy.spatial.transform import Rotation as R
 from tf2_ros import TransformBroadcaster
 from geometry_msgs.msg import TransformStamped
+from scipy.integrate import quad
 
 g = 9.8 # Gravity
 mb = 1 # Body mass
@@ -18,6 +19,14 @@ zdot0 = 5 # Initial z velocity
 x0 = 0 # Initial horizontal position
 z0 = 1 # Initial height
 T = 2*zdot0/g # Time of flight
+w = 2*np.pi/T
+
+l_d = l0
+phi_d = phi0
+
+def theta_to_alpha(theta, phi):
+  alpha = theta + ml/(1 + ml)*phi
+  return alpha
 
 rospy.init_node('hopper_node', anonymous=True)
 
@@ -81,10 +90,24 @@ z = z0
 xdot = xdot0
 zdot = zdot0
 
-# Sinusoid parameters for u1 and u2
-a1 = 5
+# Find sinusoid parameters for u1 and u2
+# a1 = 5
+# a2 = 5
+
+theta_d = np.pi/4
+alpha_0 = theta_to_alpha(theta0, phi0)
+alpha_d = theta_to_alpha(theta_d, phi_d)
+
+# Pick a2 arbitrarily
 a2 = 5
-w = 2*np.pi/T
+
+# Numerically compute the first Fourier coefficient of the Fourier series for the
+# mutliplier for u1 in the dynamics of alphadot
+def integrand(t):
+  l_t = a2/w*np.sin(w*t) + l0
+  return (-ml*(1 + l_t)**2/(1 + ml*(l_t + 1)**2) + ml/(1 + ml))*np.sin(w*t)
+beta1 = w/np.pi*quad(integrand, 0, T)[0]
+a1 = (alpha_d - alpha_0)*w/np.pi/beta1
 
 t = 0
 
@@ -105,7 +128,7 @@ while not rospy.is_shutdown():
 
     t += dt
 
-    alpha = theta + ml/(1 + ml)*phi
+    alpha = theta_to_alpha(theta, phi)
 
   # Publish visualization
   body_pos = np.array([x, 0., z])
