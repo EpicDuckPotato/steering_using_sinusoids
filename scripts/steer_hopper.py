@@ -103,11 +103,18 @@ a2 = 5
 
 # Numerically compute the first Fourier coefficient of the Fourier series for the
 # mutliplier for u1 in the dynamics of alphadot
+'''
 def integrand(t):
   l_t = a2/w*np.sin(w*t) + l0
   return (-ml*(1 + l_t)**2/(1 + ml*(l_t + 1)**2) + ml/(1 + ml))*np.sin(w*t)
 beta1 = w/np.pi*quad(integrand, 0, T)[0]
 a1 = (alpha_d - alpha_0)*w/np.pi/beta1
+'''
+def integrand(t):
+  l_t = a2/w*np.sin(w*t) + l0
+  return -ml*(l_t + 1)**2/(1 + ml*(l_t + 1)**2)*np.sin(w*t)
+beta1 = w/np.pi*quad(integrand, 0, T)[0]
+a1 = (theta_d - theta0)*w/np.pi/beta1
 
 t = 0
 
@@ -129,6 +136,7 @@ while not rospy.is_shutdown():
     t += dt
 
     alpha = theta_to_alpha(theta, phi)
+    print(theta)
 
   # Publish visualization
   body_pos = np.array([x, 0., z])

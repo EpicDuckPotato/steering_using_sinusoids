@@ -215,6 +215,7 @@ while t < delta_t2:
   t += dt
 
 # Visualize results
+start_time = rospy.Time.now()
 i = 0
 rate = rospy.Rate(1/dt)
 while not rospy.is_shutdown():
@@ -222,7 +223,7 @@ while not rospy.is_shutdown():
   y = y_trj[i]
   phi = phi_trj[i]
   theta = theta_trj[i]
-  if i < len(x_trj) - 1:
+  if i < len(x_trj) - 1 and (rospy.Time.now() - start_time).to_sec() > 2:
     i += 1
 
   # Publish visualization
