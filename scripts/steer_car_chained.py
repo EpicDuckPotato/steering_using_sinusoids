@@ -9,7 +9,7 @@ from geometry_msgs.msg import TransformStamped
 from sensor_msgs.msg import JointState
 from scipy.integrate import quad
 
-rospy.init_node('hopper_node', anonymous=True)
+rospy.init_node('car_node', anonymous=True)
 
 # Car length and width (remember to change these if you change the URDF)
 w = 0.5

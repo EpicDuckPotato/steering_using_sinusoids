@@ -8,8 +8,10 @@ from tf2_ros import TransformBroadcaster
 from geometry_msgs.msg import TransformStamped
 from sensor_msgs.msg import JointState
 from scipy.integrate import quad
+import time
+import rospkg
 
-rospy.init_node('hopper_node', anonymous=True)
+rospy.init_node('car_node', anonymous=True)
 
 # Car length and width (remember to change these if you change the URDF)
 w = 0.5
@@ -68,17 +70,21 @@ y = y_0
 phi = phi_0 
 theta = theta_0
 
-# Store computed trajectory
+# Store computed state and control trajectories
 x_trj = [x]
 y_trj = [y]
 phi_trj = [phi]
 theta_trj = [theta]
+
+u1_trj = []
+u2_trj = []
 
 # In stage 0, we steer x and phi to their desired values.
 # In stage 1, we steer theta to its desired value.
 # In stage 2, we steer y to its desired value
 
 ##### STAGE 0 ####
+bt = time.perf_counter()
 delta_t0 = 4 # Desired duration of stage 0
 t = 0 # Set t = 0 at the beginning of each stage for clarity of thought
 
@@ -101,6 +107,9 @@ while t < delta_t0:
   y_trj.append(y)
   phi_trj.append(phi)
   theta_trj.append(theta)
+
+  u1_trj.append(u1)
+  u2_trj.append(u2)
 
   t += dt
 
@@ -133,6 +142,9 @@ while t < delta_t1:
   y_trj.append(y)
   phi_trj.append(phi)
   theta_trj.append(theta)
+
+  u1_trj.append(u1)
+  u2_trj.append(u2)
 
   t += dt
 
@@ -212,7 +224,20 @@ while t < delta_t2:
   phi_trj.append(phi)
   theta_trj.append(theta)
 
+  u1_trj.append(u1)
+  u2_trj.append(u2)
+
   t += dt
+
+at = time.perf_counter()
+print('Optimized trajectory in %f seconds' %(at - bt))
+
+control_cost = sum([0.5*(u1**2 + u2**2)*dt for u1, u2 in zip(u1_trj, u2_trj)])
+print('Total control cost: %f' %(control_cost))
+
+rospack = rospkg.RosPack()
+rospath = rospack.get_path('steering_using_sinusoids')
+np.save(rospath + '/scripts/car_trj_sinusoids.npy', np.stack((x_trj, y_trj, phi_trj, theta_trj), 1))
 
 # Visualize results
 start_time = rospy.Time.now()

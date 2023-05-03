@@ -1,0 +1,9 @@
+<launch>
+  <node name="car_node" pkg="steering_using_sinusoids" type="car_trajopt.py" output="screen"/>
+  <arg name="rvizconfig" default="$(find steering_using_sinusoids)/rviz/car.rviz" />
+  <node name="car_rviz" pkg="rviz" type="rviz" args="-d $(arg rvizconfig)" required="true" />
+  <param name="robot_description" textfile="$(find steering_using_sinusoids)/urdf/car.urdf" />
+  <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher">
+    <remap from="joint_states" to="/car/joint_state" />
+  </node>
+</launch>

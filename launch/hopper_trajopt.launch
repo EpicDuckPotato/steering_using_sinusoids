@@ -1,0 +1,5 @@
+<launch>
+  <node name="hopper_node" pkg="steering_using_sinusoids" type="hopper_trajopt.py" output="screen"/>
+  <arg name="rvizconfig" default="$(find steering_using_sinusoids)/rviz/hopper.rviz" />
+  <node name="hopper_rviz" pkg="rviz" type="rviz" args="-d $(arg rvizconfig)" required="true" />
+</launch>

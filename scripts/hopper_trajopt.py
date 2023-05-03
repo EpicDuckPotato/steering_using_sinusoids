@@ -6,29 +6,31 @@ from visualization_msgs.msg import Marker
 from scipy.spatial.transform import Rotation as R
 from tf2_ros import TransformBroadcaster
 from geometry_msgs.msg import TransformStamped
-from scipy.integrate import quad
+from sensor_msgs.msg import JointState
+from dynamics_constraint import DynamicsConstraint
+from dirtran_problem import DirtranProblem
+from cost_model_actuators import CostModelActuators
+from cost_model_sum import CostModelSum
 import time
 
 g = 9.8 # Gravity
 mb = 1 # Body mass
 ml = 5 # Leg mass
-l0 = 0 # Initial leg extension (0 extension corresponds to leg length 1)
-phi0 = 0 # Initial leg angle, radians
-theta0 = 0 # Initial body angle, radians
-xdot0 = 0 # Initial x velocity
-zdot0 = 5 # Initial z velocity
-x0 = 0 # Initial horizontal position
-z0 = 1 # Initial height
-T = 2*zdot0/g # Time of flight
+l_0 = 0 # Initial leg extension (0 extension corresponds to leg length 1)
+phi_0 = 0 # Initial leg angle, radians
+theta_0 = 0 # Initial body angle, radians
+xdot_0 = 0 # Initial x velocity
+zdot_0 = 5 # Initial z velocity
+x_0 = 0 # Initial horizontal position
+z_0 = 1 # Initial height
+T = 2*zdot_0/g # Time of flight
 w = 2*np.pi/T
 
-l_d = l0
-phi_d = phi0
+l_d = l_0
+phi_d = phi_0
+theta_d = np.pi/4
 
-def theta_to_alpha(theta, phi):
-  alpha = theta + ml/(1 + ml)*phi
-  return alpha
-
+# ROS stuff
 rospy.init_node('hopper_node', anonymous=True)
 
 body_pub = rospy.Publisher('/hopper/body', Marker, queue_size=1)
@@ -79,72 +81,140 @@ body_pose_msg.header.frame_id = 'world'
 body_pose_msg.child_frame_id = 'body'
 body_pose_msg.transform.rotation.w = 1
 
+# Time step and number of time intervals in the trajectory (the number of states
+# in the trajectory is therefore steps + 1)
 dt = 0.01
-rate = rospy.Rate(1/dt)
-
-# Initialize robot state
-phi = phi0
-l = l0
-theta = theta0
-x = x0
-z = z0
-xdot = xdot0
-zdot = zdot0
-
-# Find sinusoid parameters for u1 and u2
-# a1 = 5
-# a2 = 5
-
-theta_d = np.pi/4
-alpha_0 = theta_to_alpha(theta0, phi0)
-alpha_d = theta_to_alpha(theta_d, phi_d)
-
-# Pick a2 arbitrarily
-bt = time.perf_counter()
-a2 = 5
-
-# Numerically compute the first Fourier coefficient of the Fourier series for the
-# mutliplier for u1 in the dynamics of alphadot
-'''
-def integrand(t):
-  l_t = a2/w*np.sin(w*t) + l0
-  return (-ml*(1 + l_t)**2/(1 + ml*(l_t + 1)**2) + ml/(1 + ml))*np.sin(w*t)
-beta1 = w/np.pi*quad(integrand, 0, T)[0]
-a1 = (alpha_d - alpha_0)*w/np.pi/beta1
-'''
-def integrand(t):
-  l_t = a2/w*np.sin(w*t) + l0
-  return -ml*(l_t + 1)**2/(1 + ml*(l_t + 1)**2)*np.sin(w*t)
-beta1 = w/np.pi*quad(integrand, 0, T)[0]
-a1 = (theta_d - theta0)*w/np.pi/beta1
-at = time.perf_counter()
-print('Computed sinusoid parameters in %f seconds' %(at - bt))
-
-t = 0
-
 steps = int(np.ceil(T/dt))
-control_cost = sum([0.5*((a1*np.sin(w*dt*step))**2 + (a2*np.cos(w*dt*step))**2)*dt for step in range(steps)])
+
+# Number of states and controls
+nx = 3
+nu = 2
+
+def dynamics(x, u, dt):
+  # Unpack state and control
+  phi, l, theta = x
+  u1, u2 = u
+
+  # Integrate dynamics
+  phi += u1*dt
+  l += u2*dt
+  theta += -ml*(l + 1)**2/(1 + ml*(l + 1)**2)*u1*dt
+
+  return np.array([phi, l, theta])
+
+def dynamics_deriv(x, u, dt):
+  # Unpack state and control
+  phi, l, theta = x
+  u1, u2 = u
+
+  # Deriv of next state wrt prev state
+  A = np.eye(nx)
+  A[2, 1] = -2*ml*(l + 1)/(1 + ml*(l + 1)**2)**2*u1*dt
+
+  # Deriv of next state wrt control
+  B = np.zeros((nx, nu))
+  B[0, 0] = dt
+  B[1, 1] = dt
+  B[2, 0] = -ml*(l + 1)**2/(1 + ml*(l + 1)**2)*dt
+
+  return A, B
+
+def xdiff(x1, x2):
+  return x2 - x1
+
+def xdiff_deriv(x1, x2):
+  return -np.eye(nx), np.eye(nx)
+
+# Trajectory optimization. Here x refers to the total state of size nx
+x0lb = np.array([phi_0, l_0, theta_0])
+x0ub = np.copy(x0lb)
+xlb = -100*np.ones(nx)
+xub = 100*np.ones(nx)
+ulb = -100*np.ones(nu)
+uub = 100*np.ones(nu)
+costs = []
+constraints = []
+init_xs = []
+init_us = []
+xflb = np.array([phi_d, l_d, theta_d])
+xfub = np.copy(xflb)
+
+a1, a2 = -4.290043105194483, 5
+
+x = np.copy(x0lb)
+
+for step in range(steps):
+  costs.append(CostModelActuators(0.01, nx))
+  constraints.append(DynamicsConstraint(nx, nu, 0, dynamics, dynamics_deriv, xdiff, xdiff_deriv, step, dt))
+  alpha = step/steps
+
+  # Initialize with straight-line
+  init_xs.append((1 - alpha)*x0lb + alpha*xflb) 
+  init_us.append(np.zeros(nu))
+
+  # Initialize with start state
+  '''
+  init_xs.append(x0lb) 
+  init_us.append(np.zeros(nu))
+  '''
+
+  # Initialize using sinusoids
+  '''
+  init_xs.append(np.copy(x))
+  t = step*dt
+  init_us.append(np.array([a1*np.sin(w*t), a2*np.cos(w*t)]))
+  x = dynamics(init_xs[-1], init_us[-1], dt)
+  '''
+
+costs.append(CostModelSum(nx))
+
+# Initialize with straight-line
+init_xs.append(np.copy(xflb)) 
+init_us.append(np.zeros(nu)) 
+
+# Initialize with start state
+'''
+init_xs.append(np.copy(x0lb)) 
+init_us.append(np.zeros(nu)) 
+'''
+
+# Initialize using sinusoids
+'''
+init_xs.append(np.copy(x))
+init_us.append(np.zeros(nu)) 
+'''
+
+problem = DirtranProblem(steps, dt, nx, nu, x0lb, x0ub, xlb, xub, ulb, uub, costs, constraints, init_xs, init_us, xflb, xfub)
+bt = time.perf_counter()
+xs, us, status = problem.solve()
+at = time.perf_counter()
+print('Optimized trajectory in %f seconds' %(at - bt))
+phi_trj = [x[0] for x in xs]
+l_trj = [x[1] for x in xs]
+theta_trj = [x[2] for x in xs]
+
+control_cost = sum([0.5*u@u*dt for u in us])
 print('Total control cost: %f' %(control_cost))
 
+# Visualize results
 start_time = rospy.Time.now()
+i = 0
+x = x_0
+z = z_0
+xdot = xdot_0
+zdot = zdot_0
+rate = rospy.Rate(1/dt)
 while not rospy.is_shutdown():
-  if (rospy.Time.now() - start_time).to_sec() > 2 and t < T:
-    # Integrate dynamics
-    u1 = a1*np.sin(w*t)
-    u2 = a2*np.cos(w*t)
+  phi = phi_trj[i]
+  l = l_trj[i]
+  theta = theta_trj[i]
 
-    phi += u1*dt
-    l += u2*dt
-    theta += -ml*(l + 1)**2/(1 + ml*(l + 1)**2)*u1*dt
+  if i < len(phi_trj) - 1 and (rospy.Time.now() - start_time).to_sec() > 2:
+    i += 1
 
     x += xdot*dt
     z += (zdot - 0.5*g*dt)*dt
     zdot += -g*dt
-
-    t += dt
-
-    alpha = theta_to_alpha(theta, phi)
-    print(theta)
 
   # Publish visualization
   body_pos = np.array([x, 0., z])
