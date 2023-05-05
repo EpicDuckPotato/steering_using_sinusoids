@@ -144,7 +144,7 @@ a1, a2 = -4.290043105194483, 5
 x = np.copy(x0lb)
 
 for step in range(steps):
-  costs.append(CostModelActuators(0.01, nx))
+  costs.append(CostModelActuators(1, nx))
   constraints.append(DynamicsConstraint(nx, nu, 0, dynamics, dynamics_deriv, xdiff, xdiff_deriv, step, dt))
   alpha = step/steps
 
